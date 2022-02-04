@@ -1,15 +1,15 @@
 import {
   BaseMessageComponentOptions,
+  MessageActionRow,
   MessageActionRowOptions,
   MessageMentionOptions,
-  MessageActionRow,
-  ReplyOptions,
   NewsChannel,
+  ReplyOptions,
 } from "discord.js";
-import { FireVoiceChannel } from "../extensions/voicechannel";
-import { FireTextChannel } from "../extensions/textchannel";
-import humanizeDuration = require("humanize-duration");
 import { StringMap, TOptions } from "i18next";
+import { FireTextChannel } from "../extensions/textchannel";
+import { FireVoiceChannel } from "../extensions/voicechannel";
+import humanizeDuration = require("humanize-duration");
 
 const emojiRegex = require("emoji-regex")() as RegExp;
 const emojiRegexStr = emojiRegex.toString();
@@ -41,6 +41,7 @@ export type ActionLogType =
 export type ModLogType =
   | "system"
   | "warn"
+  | "note"
   | "ban"
   | "unban"
   | "kick"
@@ -69,7 +70,12 @@ export type i18nOptions = TOptions<StringMap> & {
   )[];
   allowedMentions?: MessageMentionOptions;
   reply?: ReplyOptions;
+  includeSlashUpsell?: boolean;
 };
+
+// errors thrown by the base command class exec & run methods telling you to use the other method
+export class UseExec extends Error {}
+export class UseRun extends Error {}
 
 let emojis = {
   // shoutout to blobhub for the ebic emotes, https://inv.wtf/blobhub
@@ -382,12 +388,16 @@ export const constants = {
   ],
 };
 
-export const titleCase = (string: string, separator = " ") =>
+export const titleCase = (
+  string: string,
+  separator = " ",
+  joinWithSpace = true
+) =>
   string
     .toLowerCase()
     .split(separator)
     .map((sentence) => sentence.charAt(0).toUpperCase() + sentence.slice(1))
-    .join("");
+    .join(joinWithSpace ? " " : "");
 
 export const zws = "\u200b";
 
@@ -435,6 +445,30 @@ export const parseTime = (content: string, replace: boolean = false) => {
   if (matches.months) minutes += parseInt(matches.months || "0") * 43800;
 
   return minutes;
+};
+
+export const pluckTime = (content: string) => {
+  if (!content) return null;
+  else if (!content) return content;
+  const {
+    regexes: { time: regexes },
+  } = constants;
+  // to try reduce false positives for the time
+  // it requires a space before the time
+  // so here we add a space before the content
+  // in case the time is at the start
+  content = " " + content;
+  const matches = [
+    [regexes.month.exec(content)?.groups?.months, "mo"],
+    [regexes.week.exec(content)?.groups?.weeks, "w"],
+    [regexes.day.exec(content)?.groups?.days, "d"],
+    [regexes.hours.exec(content)?.groups?.hours, "h"],
+    [regexes.minutes.exec(content)?.groups?.minutes, "m"],
+    [regexes.seconds.exec(content)?.groups?.seconds, "s"],
+  ]
+    .filter((match) => !!match[0])
+    .map(([match, unit]) => match + unit);
+  return matches.join(" ");
 };
 
 export const shortURLs = [

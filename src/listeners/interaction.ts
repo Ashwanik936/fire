@@ -9,6 +9,7 @@ import { constants } from "@fire/lib/util/constants";
 import { GuildTagManager } from "@fire/lib/util/guildtagmanager";
 import { Listener } from "@fire/lib/util/listener";
 import {
+  AutocompleteInteraction,
   ContextMenuInteraction,
   Interaction,
   MessageComponentInteraction,
@@ -58,6 +59,10 @@ export default class InteractionListener extends Listener {
       return await this.handleApplicationCommand(
         interaction as CommandInteraction
       );
+    else if (interaction.isAutocomplete())
+      return await this.handleCommandAutocomplete(
+        interaction as AutocompleteInteraction
+      );
     else if (interaction.isContextMenu())
       return await this.handleContextMenu(interaction);
     else if (interaction.isButton())
@@ -75,7 +80,30 @@ export default class InteractionListener extends Listener {
         await command.guild.tags.init();
       }
       const message = new ApplicationCommandMessage(this.client, command);
-      await message.channel.ack((message.flags & 64) != 0);
+      if (
+        message.command.requiresExperiment?.id &&
+        !message.hasExperiment(
+          message.command.requiresExperiment.id,
+          message.command.requiresExperiment.bucket
+        )
+      ) {
+        await message.error("COMMAND_EXPERIMENT_REQUIRED");
+        if (message.guild)
+          return await message.guild.commands
+            .delete(message.slashCommand.id)
+            .catch((e: Error) =>
+              this.client.console.error(
+                `[Commands] Failed to delete locked slash command "${message.command.id}" in ${message.guild.name} (${message.guild.id})\n${e.stack}`
+              )
+            );
+        else return;
+      }
+
+      this.client.console.debug(
+        message.guild
+          ? `[Commands] Handling slash command request for command /${command.commandName} from ${message.author} (${message.author.id}) in ${message.guild.name} (${message.guild.id})`
+          : `[Commands] Handling slash command request for command /${command.commandName} from ${message.author} (${message.author.id})`
+      );
       if (!message.command) {
         this.client.console.warn(
           `[Commands] Got slash command request for unknown command, /${command.commandName}`
@@ -85,9 +113,8 @@ export default class InteractionListener extends Listener {
         return await message.error("SLASH_COMMAND_BOT_REQUIRED", {
           invite: this.client.config.inviteLink,
         });
-      await message.generateContent();
-      // @ts-ignore
-      await this.client.commandHandler.handle(message);
+      // await message.generateContent();
+      await this.client.commandHandler.handleSlash(message);
       // if (message.sent != "message")
       //   await message.sourceMessage?.delete().catch(() => {});
     } catch (error) {
@@ -114,6 +141,20 @@ export default class InteractionListener extends Listener {
         sentry.setUser(null);
       }
     }
+  }
+
+  async handleCommandAutocomplete(interaction: AutocompleteInteraction) {
+    const message = new ApplicationCommandMessage(this.client, interaction);
+    if (!message.command || typeof message.command.autocomplete !== "function")
+      return;
+    const focused = interaction.options.data.find((option) => option.focused);
+    if (!focused) return await interaction.respond([]);
+    const autocomplete = await message.command.autocomplete(message, focused);
+    return await interaction.respond(
+      Array.isArray(autocomplete) && autocomplete.length <= 25
+        ? autocomplete
+        : []
+    );
   }
 
   async handleButton(button: MessageComponentInteraction) {
@@ -197,6 +238,7 @@ export default class InteractionListener extends Listener {
         return await message.error("SLASH_COMMAND_BOT_REQUIRED", {
           invite: this.client.config.inviteLink,
         });
+      // TODO: change to handleSlash and remove content
       await message.generateContent();
       // @ts-ignore
       await this.client.commandHandler.handle(message);

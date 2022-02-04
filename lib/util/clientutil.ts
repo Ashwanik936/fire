@@ -355,9 +355,7 @@ export class Util extends ClientUtil {
     language = language ?? this.client.getLanguage("en-US");
     if (language.has(`FEATURES.${feature}` as LanguageKeys))
       return language.get(`FEATURES.${feature}` as LanguageKeys);
-    return titleCase(
-      feature.toLowerCase().replace(/_/gim, " ").replace(/guild/, "server")
-    );
+    return titleCase(feature.toLowerCase().replace(/guild/, "server"), "_");
   }
 
   bitToPermissionString(permission: bigint) {
@@ -762,6 +760,22 @@ export class Util extends ClientUtil {
     return isEligible;
   }
 
+  isEmbedEmpty(embed: MessageEmbed) {
+    return (
+      !embed.title &&
+      !embed.description &&
+      !embed.url &&
+      !embed.timestamp &&
+      !embed.footer?.text &&
+      !embed.footer?.iconURL &&
+      !embed.image?.url &&
+      !embed.thumbnail?.url &&
+      !embed.author?.name &&
+      !embed.author?.url &&
+      !embed.fields?.length
+    );
+  }
+
   async getSlashUpsellEmbed(message: FireMessage) {
     if (
       !message.hasExperiment(3144709624, 1) ||
@@ -769,6 +783,7 @@ export class Util extends ClientUtil {
     )
       return false;
     else if (!(message instanceof FireMessage)) return false;
+    else if (message.sentUpsell) return false; // we don't want to send two of them for the same message
     const slashCommands = await message.client
       .requestSlashCommands(message.guild)
       .catch(() => {});
@@ -822,7 +837,8 @@ export class Util extends ClientUtil {
             ),
           })
         );
-    else if (upsellType == "switch")
+    else if (upsellType == "switch") {
+      const cmdName = message.util?.parsed?.command?.id?.replace("-", " ");
       upsellEmbed = new MessageEmbed()
         .setColor(message.member?.displayColor ?? "#FFFFFF")
         .setAuthor({
@@ -833,34 +849,22 @@ export class Util extends ClientUtil {
           }),
         })
         .setDescription(
-          message.language.get("COMMAND_NOTICE_SLASH_SWITCH", {
-            invite: this.client.config.commandsInvite(
-              this.client,
-              message.guild.id
-            ),
-          })
+          message.language.get(
+            cmdName
+              ? "COMMAND_NOTICE_SLASH_SWITCH_WITH_NAME"
+              : "COMMAND_NOTICE_SLASH_SWITCH",
+            {
+              invite: this.client.config.commandsInvite(
+                this.client,
+                message.guild.id
+              ),
+              cmd: cmdName,
+            }
+          )
         );
+    }
+    message.sentUpsell = true;
     return upsellEmbed;
-  }
-
-  getModCommandSlashWarning(guild: FireGuild) {
-    if (!guild.hasExperiment(966055531, 1)) return [];
-    return [
-      new MessageEmbed()
-        .setColor("RED")
-        .setAuthor({
-          name: "Fire",
-          iconURL: this.client.user.displayAvatarURL({
-            size: 2048,
-            format: "png",
-          }),
-        })
-        .setDescription(
-          guild.language.get("COMMAND_NOTICE_MOD_SLASH", {
-            invite: this.client.config.commandsInvite(this.client, guild.id),
-          })
-        ),
-    ];
   }
 
   async createSpecialCoupon(

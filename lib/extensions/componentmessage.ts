@@ -173,7 +173,7 @@ export class ComponentMessage {
   }
 
   success(
-    key?: LanguageKeys,
+    key: LanguageKeys,
     args?: i18nOptions
   ): Promise<ComponentMessage | MessageReaction | void> {
     if (!key) {
@@ -199,7 +199,7 @@ export class ComponentMessage {
   }
 
   warn(
-    key?: LanguageKeys,
+    key: LanguageKeys,
     args?: i18nOptions
   ): Promise<ComponentMessage | MessageReaction | void> {
     if (!key) {
@@ -225,7 +225,7 @@ export class ComponentMessage {
   }
 
   error(
-    key?: LanguageKeys,
+    key: LanguageKeys,
     args?: i18nOptions
   ): Promise<ComponentMessage | MessageReaction | void> {
     if (!key) {

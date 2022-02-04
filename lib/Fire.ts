@@ -40,6 +40,7 @@ import GuildCheckEvent from "@fire/src/ws/events/GuildCheckEvent";
 import * as Sentry from "@sentry/node";
 import {
   AkairoClient,
+  ArgumentTypeCaster,
   InhibitorHandler,
   ListenerHandler,
   version as akairover,
@@ -53,6 +54,7 @@ import {
   SnowflakeUtil,
   version as djsver,
 } from "discord.js";
+import * as fuzz from "fuzzball";
 import * as i18next from "i18next";
 import { Client as PGClient } from "ts-postgres";
 import { ApplicationCommandMessage } from "./extensions/appcommandmessage";
@@ -310,7 +312,7 @@ export class Fire extends AkairoClient {
 
     this.commandHandler.resolver.addTypes({
       "member|role|channel|category": memberRoleChannelCategoryTypeCaster,
-      "user|member|snowflake": userMemberSnowflakeTypeCaster,
+      "user|member|snowflake": userMemberSnowflakeTypeCaster as ArgumentTypeCaster,
       "member|role|channel": memberRoleChannelTypeCaster,
       guildChannelSilent: guildChannelSilentTypeCaster,
       categorySilent: categoryChannelSilentTypeCaster,
@@ -632,6 +634,26 @@ export class Fire extends AkairoClient {
         },
       });
     });
+  }
+
+  getFuzzyCommands(command: string, limit = 20, forceRatio?: number) {
+    let ratio = forceRatio ?? 90;
+    let fuzzy: Command[] = [];
+    const commands = this.commandHandler.modules.toJSON();
+    while (!fuzzy.length && ratio >= (forceRatio ?? 60)) {
+      fuzzy = commands.filter(
+        (cmd) =>
+          fuzz.ratio(
+            command.trim().toLowerCase(),
+            cmd.id.trim().toLowerCase()
+          ) >= ratio--
+      );
+    }
+    if (!fuzzy.length)
+      fuzzy = commands.filter((cmd) => cmd.id.startsWith(command));
+    if (fuzzy.find((cmd) => cmd.id == command || cmd.aliases.includes(command)))
+      fuzzy = [this.getCommand(command)];
+    return fuzzy.slice(0, limit);
   }
 
   getCommand(id: string) {

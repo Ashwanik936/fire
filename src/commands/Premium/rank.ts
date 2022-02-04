@@ -101,7 +101,7 @@ export default class Rank extends Command {
         components = Rank.getRankDropdown(message.guild);
       if (components.length)
         return message.channel.send({ embeds: [embed], components });
-      else return message.error();
+      else return message.error("ERROR_CONTACT_SUPPORT");
     }
 
     if (

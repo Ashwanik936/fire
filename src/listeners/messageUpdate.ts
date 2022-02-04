@@ -51,7 +51,7 @@ export default class MessageUpdate extends Listener {
         );
         if (
           currentStarboardMsg.content != updatedContent ||
-          !currentStarboardMsg.embeds[0].equals(updatedEmbed)
+          !currentStarboardMsg.embeds[0]?.equals(updatedEmbed)
         )
           await currentStarboardMsg
             .edit({

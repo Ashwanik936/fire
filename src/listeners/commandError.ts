@@ -35,7 +35,9 @@ export default class CommandError extends Listener {
       fields: {
         type: "error",
         command: command.id,
-        guild: message.guild ? `${message.guild.name} (${message.guildId})` : "N/A",
+        guild: message.guild
+          ? `${message.guild.name} (${message.guildId})`
+          : "N/A",
         user: `${message.author} (${message.author.id})`,
         message_id: message.id,
         error: "",
@@ -90,10 +92,6 @@ export default class CommandError extends Listener {
         .catch(() => {});
       if (!checks) return;
     }
-
-    try {
-      await message.error();
-    } catch {}
 
     try {
       if (!message.author.isSuperuser()) {

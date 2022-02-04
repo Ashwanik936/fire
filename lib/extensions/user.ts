@@ -4,7 +4,8 @@ import { MessageUtil } from "@fire/lib/ws/util/MessageUtil";
 import { EventType } from "@fire/lib/ws/util/constants";
 import { UserSettings } from "@fire/lib/util/settings";
 import { BaseFakeChannel } from "../interfaces/misc";
-import { FireTextChannel } from "./textchannel";
+import { GuildTextChannel } from "../util/constants";
+import { FakeChannel } from "./appcommandmessage";
 import { Message } from "@fire/lib/ws/Message";
 import { FireMember } from "./guildmember";
 import { murmur3 } from "murmurhash-js";
@@ -198,7 +199,7 @@ export class FireUser extends User {
     reason: string,
     moderator: FireMember,
     days: number = 0,
-    channel?: FireTextChannel
+    channel?: FakeChannel | GuildTextChannel
   ) {
     if (!guild || !reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
@@ -242,11 +243,6 @@ export class FireUser extends User {
             (this.id == "159985870458322944"
               ? "\nhttps://tenor.com/view/star-wars-death-star-explosion-explode-gif-17964336"
               : ""),
-          embeds:
-            channel instanceof BaseFakeChannel ||
-            moderator.id == this.client.user?.id
-              ? []
-              : this.client.util.getModCommandSlashWarning(guild),
         })
         .catch(() => {});
   }

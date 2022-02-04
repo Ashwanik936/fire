@@ -14,9 +14,9 @@ import {
   Util,
 } from "discord.js";
 import { BaseFakeChannel } from "../interfaces/misc";
+import { GuildTextChannel } from "../util/constants";
+import { FakeChannel } from "./appcommandmessage";
 import { FireGuild } from "./guild";
-import { FireMessage } from "./message";
-import { FireTextChannel } from "./textchannel";
 import { FireUser } from "./user";
 
 export class FireMember extends GuildMember {
@@ -116,10 +116,11 @@ export class FireMember extends GuildMember {
     );
   }
 
-  isModerator(channel?: Channel) {
+  isModerator(channel?: Channel | BaseFakeChannel) {
     if (this.id == this.client.user?.id) return true;
     if (this.id == this.guild.ownerId) return true;
     if (channel instanceof BaseFakeChannel) channel = channel.real;
+    else if (channel instanceof ThreadChannel) channel = channel.parent;
     if (this.isAdmin(channel)) return true;
     const moderators = this.guild.settings.get<string[]>(
       "utils.moderators",
@@ -133,7 +134,7 @@ export class FireMember extends GuildMember {
     } else return null;
   }
 
-  isAdmin(channel?: Channel) {
+  isAdmin(channel?: Channel | BaseFakeChannel) {
     if (this.id == this.client.user?.id) return true;
     if (this.id == this.guild.ownerId) return true;
     if (channel instanceof BaseFakeChannel) channel = channel.real;
@@ -310,7 +311,11 @@ export class FireMember extends GuildMember {
     await this.decancer();
   }
 
-  async warn(reason: string, moderator: FireMember, channel?: FireTextChannel) {
+  async warn(
+    reason: string,
+    moderator: FireMember,
+    channel?: FakeChannel | GuildTextChannel
+  ) {
     if (!reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
     const embed = new MessageEmbed()
@@ -365,11 +370,6 @@ export class FireMember extends GuildMember {
                 user: Util.escapeMarkdown(this.toString()),
                 times,
               }),
-              embeds:
-                channel instanceof BaseFakeChannel ||
-                moderator.id == this.client.user?.id
-                  ? []
-                  : this.client.util.getModCommandSlashWarning(this.guild),
             })
             .catch(() => {})
         : await channel
@@ -378,13 +378,50 @@ export class FireMember extends GuildMember {
                 user: Util.escapeMarkdown(this.toString()),
                 times,
               }),
-              embeds:
-                channel instanceof BaseFakeChannel ||
-                moderator.id == this.client.user?.id
-                  ? []
-                  : this.client.util.getModCommandSlashWarning(this.guild),
             })
             .catch(() => {});
+  }
+
+  async note(
+    reason: string,
+    moderator: FireMember,
+    channel?: FakeChannel | GuildTextChannel
+  ) {
+    if (!reason || !moderator) return "args";
+    if (!moderator.isModerator(channel)) return "forbidden";
+    const embed = new MessageEmbed()
+      .setColor("#E67E22")
+      .setTimestamp()
+      .setAuthor(
+        this.guild.language.get("NOTE_LOG_AUTHOR", { user: this.toString() }),
+        this.displayAvatarURL({ size: 2048, format: "png", dynamic: true })
+      )
+      .addField(this.guild.language.get("MODERATOR"), moderator.toString())
+      .addField(this.guild.language.get("REASON"), reason)
+      .setFooter(`${this.id} | ${moderator.id}`);
+    const logEntry = await this.guild
+      .createModLogEntry(this, moderator, "note", reason)
+      .catch(() => {});
+    if (!logEntry) return "entry";
+    await this.guild.modLog(embed, "note").catch(() => {});
+    const count = await this.client.db
+      .query(
+        "SELECT COUNT(*) FROM modlogs WHERE gid=$1 AND type=$2 AND uid=$3;",
+        [this.guild.id, "note", this.id]
+      )
+      .first()
+      .then((result) => (result.get("count") as number) ?? 0)
+      .catch(() => 0);
+    const times = this.client.util.numberWithSuffix(count);
+    if (channel)
+      return await channel
+        .send({
+          content: this.guild.language.getSuccess("NOTE_SUCCESS", {
+            user: Util.escapeMarkdown(this.toString()),
+            times,
+          }),
+        })
+        .catch(() => {});
   }
 
   async bean(
@@ -392,7 +429,7 @@ export class FireMember extends GuildMember {
     moderator: FireMember,
     until?: number,
     days: number = 0,
-    channel?: FireTextChannel,
+    channel?: FakeChannel | GuildTextChannel,
     sendDM: boolean = true
   ) {
     if (!reason || !moderator) return "args";
@@ -482,11 +519,6 @@ export class FireMember extends GuildMember {
             (this.id == "159985870458322944"
               ? "\nhttps://tenor.com/view/star-wars-death-star-explosion-explode-gif-17964336"
               : ""),
-          embeds:
-            channel instanceof BaseFakeChannel ||
-            moderator.id == this.client.user?.id
-              ? []
-              : this.client.util.getModCommandSlashWarning(this.guild),
         })
         .catch(() => {});
   }
@@ -494,7 +526,7 @@ export class FireMember extends GuildMember {
   async yeet(
     reason: string,
     moderator: FireMember,
-    channel?: FireTextChannel,
+    channel?: FakeChannel | GuildTextChannel,
     sendDM: boolean = true
   ) {
     if (!reason || !moderator) return "args";
@@ -549,11 +581,6 @@ export class FireMember extends GuildMember {
           content: this.guild.language.getSuccess("KICK_SUCCESS", {
             user: Util.escapeMarkdown(this.toString()),
           }),
-          embeds:
-            channel instanceof BaseFakeChannel ||
-            moderator.id == this.client.user?.id
-              ? []
-              : this.client.util.getModCommandSlashWarning(this.guild),
         })
         .catch(() => {});
   }
@@ -561,7 +588,7 @@ export class FireMember extends GuildMember {
   async derank(
     reason: string,
     moderator: FireMember,
-    channel?: FireTextChannel
+    channel?: FakeChannel | GuildTextChannel
   ) {
     if (!reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
@@ -630,11 +657,6 @@ export class FireMember extends GuildMember {
             : this.guild.language.getSuccess("DERANK_SUCCESS", {
                 user: Util.escapeMarkdown(this.toString()),
               }),
-          embeds:
-            channel instanceof BaseFakeChannel ||
-            moderator.id == this.client.user?.id
-              ? []
-              : this.client.util.getModCommandSlashWarning(this.guild),
         })
         .catch(() => {});
   }
@@ -643,7 +665,7 @@ export class FireMember extends GuildMember {
     reason: string,
     moderator: FireMember,
     until?: number,
-    channel?: FireTextChannel,
+    channel?: FakeChannel | GuildTextChannel,
     sendDM: boolean = true
   ) {
     const canTimeOut =
@@ -653,14 +675,13 @@ export class FireMember extends GuildMember {
       this.guild.me?.permissions?.has("MODERATE_MEMBERS");
     if (!reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
+    let useEdit = false;
     if (!this.guild.muteRole && !canTimeOut) {
-      let settingUp: FireMessage;
-      if (channel)
-        settingUp = (await channel.send(
-          this.language.get("MUTE_ROLE_CREATE_REASON")
-        )) as FireMessage;
+      if (channel) {
+        useEdit = true;
+        await channel.send(this.language.get("MUTE_ROLE_CREATE_REASON"));
+      }
       const role = await this.guild.initMuteRole();
-      settingUp?.delete();
       if (!role) return "role";
     } else if (!canTimeOut) this.guild.syncMuteRolePermissions();
     const logEntry = await this.guild
@@ -750,11 +771,6 @@ export class FireMember extends GuildMember {
             : this.guild.language.getWarning("MUTE_SEMI_SUCCESS", {
                 user: Util.escapeMarkdown(this.toString()),
               }),
-          embeds:
-            channel instanceof BaseFakeChannel ||
-            moderator.id == this.client.user?.id
-              ? []
-              : this.client.util.getModCommandSlashWarning(this.guild),
         })
         .catch(() => {});
   }
@@ -762,7 +778,7 @@ export class FireMember extends GuildMember {
   async unmute(
     reason: string,
     moderator: FireMember,
-    channel?: FireTextChannel
+    channel?: FakeChannel | GuildTextChannel
   ) {
     if (!reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
@@ -866,11 +882,6 @@ export class FireMember extends GuildMember {
           content: this.guild.language.getSuccess("UNMUTE_SUCCESS", {
             user: Util.escapeMarkdown(this.toString()),
           }),
-          embeds:
-            channel instanceof BaseFakeChannel ||
-            moderator.id == this.client.user?.id
-              ? []
-              : this.client.util.getModCommandSlashWarning(this.guild),
         })
         .catch(() => {});
   }

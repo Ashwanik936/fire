@@ -51,6 +51,7 @@ export class FireMessage extends Message {
   starLock: Semaphore;
   selfDelete: boolean;
   util?: CommandUtil;
+  sentUpsell = false;
   silent?: boolean;
 
   constructor(client: Fire, data: RawMessageData) {
@@ -138,13 +139,17 @@ export class FireMessage extends Message {
           });
   }
 
-  send(key?: LanguageKeys, args?: i18nOptions) {
+  async send(key: LanguageKeys, args?: i18nOptions) {
     if (this.channel.deleted) return;
+    let upsell: MessageEmbed | false;
+    if (args?.includeSlashUpsell)
+      upsell = await this.client.util.getSlashUpsellEmbed(this);
     return this.channel.send({
       content: this.language.get(key, args),
       allowedMentions: args?.allowedMentions,
       components: args?.components,
       reply: args?.reply,
+      embeds: upsell ? [upsell] : undefined,
     });
   }
 
@@ -157,11 +162,14 @@ export class FireMessage extends Message {
     return (await super.reply(options)) as FireMessage;
   }
 
-  success(
-    key?: LanguageKeys,
+  async success(
+    key: LanguageKeys,
     args?: i18nOptions
   ): Promise<MessageReaction | Message | void> {
     if ((!key && this.deleted) || this.channel.deleted) return;
+    let upsell: MessageEmbed | false;
+    if (args?.includeSlashUpsell)
+      upsell = await this.client.util.getSlashUpsellEmbed(this);
     return !key
       ? this.react(reactions.success).catch(() => {})
       : this.channel.send({
@@ -169,14 +177,18 @@ export class FireMessage extends Message {
           allowedMentions: args?.allowedMentions,
           components: args?.components,
           reply: args?.reply,
+          embeds: upsell ? [upsell] : undefined,
         });
   }
 
-  warn(
-    key?: LanguageKeys,
+  async warn(
+    key: LanguageKeys,
     args?: i18nOptions
   ): Promise<MessageReaction | Message | void> {
     if ((!key && this.deleted) || this.channel.deleted) return;
+    let upsell: MessageEmbed | false;
+    if (args?.includeSlashUpsell)
+      upsell = await this.client.util.getSlashUpsellEmbed(this);
     return !key
       ? this.react(reactions.warning).catch(() => {})
       : this.reply({
@@ -184,14 +196,18 @@ export class FireMessage extends Message {
           allowedMentions: args?.allowedMentions,
           components: args?.components,
           failIfNotExists: false,
+          embeds: upsell ? [upsell] : undefined,
         });
   }
 
-  error(
-    key?: LanguageKeys,
+  async error(
+    key: LanguageKeys,
     args?: i18nOptions
   ): Promise<MessageReaction | Message | void> {
     if ((!key && this.deleted) || this.channel.deleted) return;
+    let upsell: MessageEmbed | false;
+    if (args?.includeSlashUpsell)
+      upsell = await this.client.util.getSlashUpsellEmbed(this);
     return !key
       ? this.react(reactions.error).catch(() => {})
       : this.reply({
@@ -199,18 +215,19 @@ export class FireMessage extends Message {
           allowedMentions: args?.allowedMentions,
           components: args?.components,
           failIfNotExists: false,
+          embeds: upsell ? [upsell] : undefined,
         });
   }
 
-  react(emoji: EmojiIdentifierResolvable) {
+  async react(emoji: EmojiIdentifierResolvable) {
     if (
       (this.channel instanceof ThreadChannel && this.channel.archived) ||
       this.channel.deleted
     )
       return;
     if (process.env.USE_LITECORD == "true")
-      return super.react(emoji).catch(() => this.reactions.cache.first());
-    return super.react(emoji);
+      return await super.react(emoji).catch(() => this.reactions.cache.first());
+    return await super.react(emoji);
   }
 
   hasExperiment(id: number, bucket: number | number[]) {

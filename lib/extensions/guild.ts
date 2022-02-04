@@ -1,58 +1,60 @@
-import {
-  PermissionOverwriteOptions,
-  GuildAuditLogsFetchOptions,
-  PermissionResolvable,
-  MessageEmbedOptions,
-  MessageAttachment,
-  BaseFetchOptions,
-  MessageActionRow,
-  CategoryChannel,
-  GuildAuditLogs,
-  MessageButton,
-  WebhookClient,
-  ThreadChannel,
-  MessageEmbed,
-  StageChannel,
-  GuildChannel,
-  Permissions,
-  NewsChannel,
-  Structures,
-  Collection,
-  Formatters,
-  Snowflake,
-  Webhook,
-  Guild,
-  Role,
-  Util,
-} from "discord.js";
+import { Fire } from "@fire/lib/Fire";
+import { ReactionRoleData } from "@fire/lib/interfaces/rero";
 import {
   ActionLogType,
+  GuildTextChannel,
   MemberLogType,
   ModLogType,
 } from "@fire/lib/util/constants";
-import { GuildTagManager } from "@fire/lib/util/guildtagmanager";
-import { RawGuildData } from "discord.js/typings/rawDataTypes";
-import { ReactionRoleData } from "@fire/lib/interfaces/rero";
-import TicketName from "@fire/src/commands/Tickets/name";
-import { PermRolesData } from "../interfaces/permroles";
-import { GuildSettings } from "@fire/lib/util/settings";
-import { BadgeType, DiscoverableGuild } from "../interfaces/stats";
 import { getIDMatch } from "@fire/lib/util/converters";
-import { GuildLogManager } from "../util/logmanager";
-import { BaseFakeChannel } from "../interfaces/misc";
-import { MessageIterator } from "../util/iterators";
-import { FireVoiceChannel } from "./voicechannel";
-import { LanguageKeys } from "../util/language";
-import { FireTextChannel } from "./textchannel";
-import Semaphore from "semaphore-async-await";
+import { GuildTagManager } from "@fire/lib/util/guildtagmanager";
+import { GuildSettings } from "@fire/lib/util/settings";
+import TicketName from "@fire/src/commands/Tickets/name";
 import { APIGuild } from "discord-api-types";
+import {
+  BaseFetchOptions,
+  CategoryChannel,
+  Collection,
+  Formatters,
+  Guild,
+  GuildAuditLogs,
+  GuildAuditLogsFetchOptions,
+  GuildChannel,
+  GuildFeatures,
+  MessageActionRow,
+  MessageAttachment,
+  MessageButton,
+  MessageEmbed,
+  MessageEmbedOptions,
+  PermissionOverwriteOptions,
+  PermissionResolvable,
+  Permissions,
+  Role,
+  Snowflake,
+  StageChannel,
+  Structures,
+  ThreadChannel,
+  Util,
+  Webhook,
+  WebhookClient,
+} from "discord.js";
+import { RawGuildData } from "discord.js/typings/rawDataTypes";
+import { murmur3 } from "murmurhash-js";
+import { nanoid } from "nanoid";
+import Semaphore from "semaphore-async-await";
+import { v4 as uuidv4 } from "uuid";
+import { BaseFakeChannel } from "../interfaces/misc";
+import { PermRolesData } from "../interfaces/permroles";
+import { BadgeType, DiscoverableGuild } from "../interfaces/stats";
+import { MessageIterator } from "../util/iterators";
+import { LanguageKeys } from "../util/language";
+import { GuildLogManager } from "../util/logmanager";
+import { FakeChannel } from "./appcommandmessage";
 import { FireMember } from "./guildmember";
 import { FireMessage } from "./message";
-import { murmur3 } from "murmurhash-js";
-import { Fire } from "@fire/lib/Fire";
-import { v4 as uuidv4 } from "uuid";
+import { FireTextChannel } from "./textchannel";
 import { FireUser } from "./user";
-import { nanoid } from "nanoid";
+import { FireVoiceChannel } from "./voicechannel";
 
 const BOOST_TIERS = {
   NONE: 0,
@@ -716,14 +718,15 @@ export class FireGuild extends Guild {
     // node_env is only "development" for local testing, it's "staging" for fire beta
     if (process.env.NODE_ENV == "development") return true;
     return (
-      (this.settings.get<boolean>("utils.public", false) &&
+      !this.features.includes("DISCOVERABLE_DISABLED" as GuildFeatures) &&
+      ((this.settings.get<boolean>("utils.public", false) &&
         this.memberCount >= 20 &&
         +new Date() - this.createdTimestamp > 2629800000) ||
-      (this.features &&
-        this.features.includes("DISCOVERABLE") &&
-        this.me
-          ?.permissionsIn(this.discoverableInviteChannel)
-          ?.has(Permissions.FLAGS.CREATE_INSTANT_INVITE))
+        (this.features &&
+          this.features.includes("DISCOVERABLE") &&
+          this.me
+            ?.permissionsIn(this.discoverableInviteChannel)
+            ?.has(Permissions.FLAGS.CREATE_INSTANT_INVITE)))
     );
   }
 
@@ -1034,7 +1037,8 @@ export class FireGuild extends Guild {
     author: FireMember,
     subject: string,
     channel?: FireTextChannel,
-    category?: CategoryChannel
+    category?: CategoryChannel,
+    descriptionOverride?: string
   ) {
     if (channel instanceof BaseFakeChannel)
       channel = channel.real as FireTextChannel;
@@ -1221,7 +1225,8 @@ ${this.language.get("JOINED")} ${Formatters.time(author.joinedAt, "R")}`;
       .setColor(author.displayColor ?? "#FFFFFF")
       .addField(this.language.get("SUBJECT"), subject)
       .addField(this.language.get("USER"), authorInfo);
-    const description = this.settings.get<string>("tickets.description");
+    const description =
+      descriptionOverride ?? this.settings.get<string>("tickets.description");
     if (description) embed.setDescription(description);
     const alertId = this.settings.get<Snowflake>("tickets.alert");
     const alert = this.roles.cache.get(alertId);
@@ -1433,7 +1438,7 @@ ${this.language.get("JOINED")} ${Formatters.time(author.joinedAt, "R")}`;
     user: FireUser,
     reason: string,
     moderator: FireMember,
-    channel?: FireTextChannel
+    channel?: FakeChannel | GuildTextChannel
   ) {
     if (!reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
@@ -1481,11 +1486,6 @@ ${this.language.get("JOINED")} ${Formatters.time(author.joinedAt, "R")}`;
             user: Util.escapeMarkdown(user.toString()),
             guild: Util.escapeMarkdown(this.name),
           }),
-          embeds:
-            channel instanceof BaseFakeChannel ||
-            moderator.id == this.client.user?.id
-              ? []
-              : this.client.util.getModCommandSlashWarning(this),
         })
         .catch(() => {});
   }
@@ -1494,7 +1494,7 @@ ${this.language.get("JOINED")} ${Formatters.time(author.joinedAt, "R")}`;
     blockee: FireMember | Role,
     reason: string,
     moderator: FireMember,
-    channel: FireTextChannel | FireVoiceChannel | NewsChannel
+    channel: FakeChannel | GuildTextChannel
   ) {
     if (!reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
@@ -1556,11 +1556,6 @@ ${this.language.get("JOINED")} ${Formatters.time(author.joinedAt, "R")}`;
             blockee instanceof FireMember ? blockee.toString() : blockee.name
           ),
         }),
-        embeds:
-          channel instanceof BaseFakeChannel ||
-          moderator.id == this.client.user?.id
-            ? []
-            : this.client.util.getModCommandSlashWarning(this),
       })
       .catch(() => {});
   }
@@ -1569,7 +1564,7 @@ ${this.language.get("JOINED")} ${Formatters.time(author.joinedAt, "R")}`;
     unblockee: FireMember | Role,
     reason: string,
     moderator: FireMember,
-    channel: FireTextChannel | FireVoiceChannel | NewsChannel
+    channel: FakeChannel | GuildTextChannel
   ) {
     if (!reason || !moderator) return "args";
     if (!moderator.isModerator(channel)) return "forbidden";
@@ -1646,11 +1641,6 @@ ${this.language.get("JOINED")} ${Formatters.time(author.joinedAt, "R")}`;
               : unblockee.name
           ),
         }),
-        embeds:
-          channel instanceof BaseFakeChannel ||
-          moderator.id == this.client.user?.id
-            ? []
-            : this.client.util.getModCommandSlashWarning(this),
       })
       .catch(() => {});
   }
