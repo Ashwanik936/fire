@@ -1309,6 +1309,8 @@
   "WARNINGS_CLEAR_ALL_SUCCESS": "Successfully cleared {{amount}} warning(s) from **{{user}}**",
   "WARNINGS_CLEAR_SINGLE_SUCCESS": "Successfully cleared warning!",
   "WARNINGS_CLEAR_FAILED": "Uh oh, something went wrong while trying to clear warnings",
+  "WORDLE_COMMAND_DESCRIPTION": "The world's favorite game (probably) now in Discord!",
+  "WORDLE_SOLUTION_UNKNOWN": "I don't have today's solution, something probably went wrong while fetching it so maybe try again in a bit?",
   "YTSYNC_COMMAND_DESCRIPTION": "Allows creation of YT Sync invites for a specific voice channel, allowing access without the need for experiments",
   "YTSYNC_CHANNEL_REQUIRED": "You must provide a valid voice channel!"
 }
