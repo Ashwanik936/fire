@@ -1,3 +1,2 @@
-hi i will eventually add things here but for now,
-
-https://inv.wtf/bot invite fire now!
+#This Is A Custom Fork For Fire Bot Discord.
+**I Will Add Custom Feature Here**
